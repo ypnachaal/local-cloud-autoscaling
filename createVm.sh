@@ -1,4 +1,4 @@
-cat > create_cloud_vm.sh << 'EOF'
+cat > createVm.sh << 'EOF'
 gcloud compute instances create autoscale-vm-1 \
 --zone=us-central1-a \
 --machine-type=e2-micro \
