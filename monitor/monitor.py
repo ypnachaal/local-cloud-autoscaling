@@ -4,20 +4,20 @@ import os
 import multiprocessing
 
 THRESHOLD = 75
-VM_NAME = "autoscale-vm-2"
 ZONE = "us-central1-a"
-VM_CREATED = False
+MIG_NAME = "my-mig"
+TEMPLATE_NAME = "my-template"
+SETUP_DONE = False
 
 
-# 🔥 Function to create CPU load (LOCAL)
+# LOCAL CPU STRESS
 def stress_cpu():
     while True:
         pass
 
 
-# ⚡ Start LOCAL CPU stress
 def start_stress():
-    print("\n⚡ STEP 1: Starting LOCAL CPU stress...\n")
+    print("\nSTEP 1: Starting LOCAL CPU stress...\n")
 
     processes = []
     for _ in range(multiprocessing.cpu_count()):
@@ -28,87 +28,106 @@ def start_stress():
     return processes
 
 
-# 🔍 Check if VM exists
-def check_vm_exists():
-    cmd = f'gcloud compute instances list --filter="name={VM_NAME}" --format="value(name)"'
-    result = os.popen(cmd).read().strip()
-    return result == VM_NAME
+# CREATE INSTANCE TEMPLATE
+def create_template():
+    print("STEP 2: Creating instance template...\n")
+
+    os.system(f"""
+    gcloud compute instance-templates create {TEMPLATE_NAME} \
+    --machine-type=e2-micro \
+    --image-family=ubuntu-2204-lts \
+    --image-project=ubuntu-os-cloud
+    """)
 
 
-# 🔥 Stress inside GCP VM
-def stress_gcp_vm():
-    print("\n🔥 STEP 3: Applying CPU stress on GCP VM...\n")
+# CREATE MIG
+def create_mig():
+    print("STEP 3: Creating managed instance group...\n")
 
-    cmd = f"""
-    gcloud compute ssh {VM_NAME} --zone={ZONE} --command="
+    os.system(f"""
+    gcloud compute instance-groups managed create {MIG_NAME} \
+    --base-instance-name autoscale-vm \
+    --size=1 \
+    --template={TEMPLATE_NAME} \
+    --zone={ZONE}
+    """)
+
+
+# ENABLE AUTOSCALING
+def enable_autoscaling():
+    print("STEP 4: Enabling autoscaling...\n")
+
+    os.system(f"""
+    gcloud compute instance-groups managed set-autoscaling {MIG_NAME} \
+    --zone={ZONE} \
+    --max-num-replicas=3 \
+    --target-cpu-utilization=0.75 \
+    --cool-down-period=60
+    """)
+
+
+# APPLY STRESS ON GCP INSTANCE
+def stress_gcp():
+    print("\nSTEP 5: Applying stress on GCP instance...\n")
+
+    # Get first instance name
+    instance = os.popen(f"""
+    gcloud compute instance-groups managed list-instances {MIG_NAME} \
+    --zone={ZONE} \
+    --format="value(instance)"
+    """).read().strip().split("\n")[0]
+
+    os.system(f"""
+    gcloud compute ssh {instance} --zone={ZONE} --command="
     sudo apt update -y &&
     sudo apt install -y stress &&
     stress --cpu 2 --timeout 120
     "
-    """
-
-    os.system(cmd)
+    """)
 
 
-# 🚀 Create or reuse VM
-def create_or_reuse_vm():
-    print("\n🚀 STEP 2: Checking VM on GCP...\n")
+# MONITOR MIG SIZE
+def monitor_mig():
+    print("\nChecking instance count in MIG...\n")
 
-    if check_vm_exists():
-        print("✅ VM already exists. Reusing existing VM.\n")
-        os.system(f"gcloud compute instances start {VM_NAME} --zone={ZONE}")
-    else:
-        print("⚡ VM not found. Creating new VM...\n")
-
-        cmd = f"""
-        gcloud compute instances create {VM_NAME} \
-        --zone={ZONE} \
-        --machine-type=e2-micro \
-        --image-family=ubuntu-2204-lts \
-        --image-project=ubuntu-os-cloud \
-        --tags=http-server
-        """
-
-        result = os.system(cmd)
-
-        if result == 0:
-            print("✅ VM successfully created on GCP\n")
-        else:
-            print("❌ Error creating VM\n")
-            return
-
-    # ⏳ wait for VM to be ready
-    print("⏳ Waiting for VM to be ready...\n")
-    time.sleep(20)
-
-    # 🔥 Stress GCP VM
-    stress_gcp_vm()
+    os.system(f"""
+    gcloud compute instance-groups managed list-instances {MIG_NAME} \
+    --zone={ZONE}
+    """)
 
 
-# 📊 Monitor loop
+# MAIN MONITOR LOOP
 def monitor():
-    global VM_CREATED
+    global SETUP_DONE
 
-    print("\n📊 STEP 2: Monitoring CPU...\n")
+    print("\nSTEP 2: Monitoring CPU...\n")
 
     while True:
         cpu = psutil.cpu_percent(interval=2)
-        print(f"📊 CPU Usage: {cpu}%")
+        print(f"CPU Usage: {cpu}%")
 
-        if cpu > THRESHOLD and not VM_CREATED:
-            print("\n🔥 Threshold exceeded (>75%)")
-            print("➡️ Triggering cloud scaling...\n")
+        # Run setup once
+        if not SETUP_DONE:
+            create_template()
+            create_mig()
+            enable_autoscaling()
+            SETUP_DONE = True
 
-            create_or_reuse_vm()
-            VM_CREATED = True
+        if cpu > THRESHOLD:
+            print("\nThreshold exceeded (>75%)")
+            print("Triggering GCP autoscaling\n")
 
-        time.sleep(5)
+            stress_gcp()
+
+        monitor_mig()
+
+        time.sleep(10)
 
 
-# 🚀 MAIN
+# MAIN
 if __name__ == "__main__":
     print("\n==============================")
-    print("🚀 CLOUD AUTO-SCALING DEMO")
+    print("CLOUD AUTO-SCALING DEMO")
     print("==============================\n")
 
     start_stress()
