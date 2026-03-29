@@ -3,19 +3,27 @@ import time
 import os
 
 THRESHOLD = 75
+VM_CREATED = False
 
-def trigger_cloud():
-    print("Threshold exceeded! Triggering cloud scaling...")
-    os.system("bash deploy_to_cloud.sh")
+def create_gcp_vm():
+    print("🚀 Creating VM on GCP...")
+
+    os.system("""
+    gcloud compute instances create autoscale-vm-1 \
+    --zone=us-central1-a \
+    --machine-type=e2-micro \
+    --image-family=ubuntu-2204-lts \
+    --image-project=ubuntu-os-cloud \
+    --tags=http-server
+    """)
 
 while True:
     cpu = psutil.cpu_percent(interval=2)
-    mem = psutil.virtual_memory().percent
+    print(f"CPU Usage: {cpu}%")
 
-    print(f"CPU: {cpu}%, Memory: {mem}%")
-
-    if cpu > THRESHOLD or mem > THRESHOLD:
-        trigger_cloud()
-        break
+    if cpu > THRESHOLD and not VM_CREATED:
+        print("🔥 Threshold exceeded! Triggering auto-scale...")
+        create_gcp_vm()
+        VM_CREATED = True
 
     time.sleep(5)
