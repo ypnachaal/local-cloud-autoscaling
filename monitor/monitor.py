@@ -94,7 +94,6 @@ if __name__ == "__main__":
     # Step 1: Start stress
     stress_processes = start_stress()
 
-    global SETUP_DONE
 
     while True:
         cpu = psutil.cpu_percent(interval=2)
