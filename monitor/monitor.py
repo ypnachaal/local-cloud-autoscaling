@@ -18,7 +18,7 @@ def create_gcp_vm():
     print("🚀 Creating VM on GCP...")
 
     os.system("""
-    gcloud compute instances create autoscale-vm-1 \
+    gcloud compute instances create autoscale-vm-2 \
     --zone=us-central1-a \
     --machine-type=e2-micro \
     --image-family=ubuntu-2204-lts \
