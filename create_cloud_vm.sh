@@ -17,7 +17,7 @@ app = Flask(__name__)
 def home():
     return "Hello from GCP VM"
 
-app.run(host="0.0.0.0", port=5000)
+app.run(host="0.0.0.0", port=80)
 APP
 python3 app.py'
 EOF
